@@ -76,7 +76,20 @@ class Lanelet():
 			# calculate polygon if have not already
 			left_bound_coords = list(self.left_bound.linestring.coords)
 			right_bound_coords = list(self.right_bound.linestring.coords)
-			right_bound_coords.reverse()
+
+			''' NOTE: Noticed that when always reversed the right bound, some of the
+			lanelet polygons were Z-shaped instead of rectangular.
+			Determined that there must not be a defined convention in the Lanelet2 format
+			for the order in which points were given.
+			Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
+			which can be determined by comparing the distance of the left bound vector-head
+			to the head and tail of the right bound vector. '''
+			left_head = Point(left_bound_coords[-1])  # last point of the left bound 
+			right_tail = Point(right_bound_coords[0])  # first point of the right bound
+			right_head = Point(right_bound_coords[-1])  # first point of the right bound
+			if left_head.distance(right_head) < left_head.distance(right_tail):
+				right_bound_coords.reverse()
+
 			left_bound_coords.extend(right_bound_coords)
 			self.polygon = Polygon(left_bound_coords)
 		return self.polygon
@@ -144,7 +157,12 @@ class MapData:
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	def heading_at(self, point):
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if needed
+
+		# IDEA: break lanelets into cells, each of which has a containsPoint(point) method, then iterate through lanelets, which have a containsPoint(point) method that calls that of its cells
+
 		pass
+		raise RuntimeError(f'Point at x={point.x}, y={point.y}')
 
 	def calculate_drivable_polygon(self):
 		''' Calculate a single Shapely Polygon that represents the entire drivable region '''
