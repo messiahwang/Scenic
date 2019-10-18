@@ -90,8 +90,10 @@ class Lanelet():
 		return any(point_in_cells)
 
 	def heading_at(self, point):
-		# TODO
-		pass
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
+		cell_with_point = [cell for cell in cells if cell.contains_point(point)][0] else None
+		assert cell_with_point, f'Point with coordinates x={point.x}, y={point.y} not in lanelet with id={self.id_}'
+		return cell_with_point.heading  # radians clockwise from y-axis
 
 	def calculate_polygon(self):
 		if not self.polygon:
@@ -181,10 +183,8 @@ class MapData:
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	def heading_at(self, point):
-		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if needed
-
-		# IDEA: break lanelets into cells, each of which has a containsPoint(point) method, then iterate through lanelets, which have a containsPoint(point) method that calls that of its cells
-
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
+		# TODO
 		pass
 		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
 
