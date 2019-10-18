@@ -52,6 +52,17 @@ class Lanelet():
 	''' Atomic lane defined by exactly one left and one right linestrings
 	that represents directed traffic from entry to exit '''
 
+	class Cell():
+		''' Section of a lane, represented as a Shapely polygon, with a defined heading '''
+
+		def __init__(self, polygon, heading):
+			self.polygon = polygon  # Shapely polygon
+			self.heading = heading  # radians clockwise from y-axis
+
+		def contains_point(self, point):
+			point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
+			return polygon.contains(point)
+
 	def __init__(self, id_, subtype, 
 					region, location, one_way, turn_direction,
 					vehicle_participant, pedestrian_participant, bicycle_participant, 
@@ -69,19 +80,30 @@ class Lanelet():
 		self.centerline = centerline
 		self.regulatory_elements = regulatory_elements
 
-		self.polygon = None  # store calculated polygon to avoid redundant calculations
+		# calculated fields
+		self.polygon = None
+		self.cells = []
+
+	def contains_point(self, point):
+		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
+		point_in_cells = [cell.contains_point(point) for cell in cells]
+		return any(point_in_cells)
+
+	def heading_at(self, point):
+		# TODO
+		pass
 
 	def calculate_polygon(self):
 		if not self.polygon:
-			# calculate polygon if have not already
 			left_bound_coords = list(self.left_bound.linestring.coords)
 			right_bound_coords = list(self.right_bound.linestring.coords)
 
-			''' NOTE: Noticed that when always reversed the right bound, some of the
+			''' NOTE: 
+			(*)	Noticed that when always reversed the right bound, some of the
 			lanelet polygons were Z-shaped instead of rectangular.
-			Determined that there must not be a defined convention in the Lanelet2 format
+			(*)	Determined that there must not be a defined convention in the Lanelet2 format
 			for the order in which points were given.
-			Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
+			(*)	Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
 			which can be determined by comparing the distance of the left bound vector-head
 			to the head and tail of the right bound vector. '''
 			left_head = Point(left_bound_coords[-1])  # last point of the left bound 
@@ -92,7 +114,10 @@ class Lanelet():
 
 			left_bound_coords.extend(right_bound_coords)
 			self.polygon = Polygon(left_bound_coords)
-		return self.polygon
+
+	def calculate_cells(self):
+		# TODO
+		pass
 
 
 class Area():
@@ -121,10 +146,9 @@ class Area():
 			# minimum 3 coordinates needed to define a polygon
 			if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
 				print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
-				return Polygon()
+				self.polygon Polygon()
 
 			self.polygon = Polygon(outer_bound_coords, inner_bound_coords)
-		return self.polygon
 
 
 class RegulatoryElement():
@@ -150,7 +174,7 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# high-level representation
+		# high-level representation (calculated field)
 		self.drivable_polygon = None  # single Shapely Polygon of drivable region
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
@@ -162,7 +186,7 @@ class MapData:
 		# IDEA: break lanelets into cells, each of which has a containsPoint(point) method, then iterate through lanelets, which have a containsPoint(point) method that calls that of its cells
 
 		pass
-		raise RuntimeError(f'Point at x={point.x}, y={point.y}')
+		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
 
 	def calculate_drivable_polygon(self):
 		''' Calculate a single Shapely Polygon that represents the entire drivable region '''
@@ -187,10 +211,12 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		for lanelet in self.lanelets.values():
-			__plot_polygon(lanelet.calculate_polygon())
+			lanelet.calculate_polygon()
+			__plot_polygon(lanelet.polygon)
 
 		for area in self.areas.values():
-			__plot_polygon(area.calculate_polygon())
+			area.calculate_polygon()
+			__plot_polygon(area.polygon)
 
 		plt.show()
 
