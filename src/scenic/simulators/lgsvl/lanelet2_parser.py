@@ -86,8 +86,9 @@ class Lanelet():
 
 	def contains_point(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
-		point_in_cells = [cell.contains_point(point) for cell in cells]
-		return any(point_in_cells)
+		if not self.polygon:
+			self.calculate_polygon()
+		return self.polygon.contains(point)
 
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
