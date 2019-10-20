@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 import matplotlib.pyplot as plt
+import math
 from shapely.geometry import Point, LineString, Polygon
 from shapely.ops import cascaded_union
 
@@ -75,9 +76,9 @@ class Lanelet():
 		self.turn_direction = turn_direction
 		self.pedestrian_participant = pedestrian_participant
 		self.bicycle_participant = bicycle_participant
-		self.left_bound = left_bound
-		self.right_bound = right_bound 
-		self.centerline = centerline
+		self.left_bound = left_bound  # L2_Linestring
+		self.right_bound = right_bound  # L2_Linestring
+		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
 
 		# calculated fields
@@ -119,8 +120,28 @@ class Lanelet():
 			self.polygon = Polygon(left_bound_coords)
 
 	def calculate_cells(self):
-		# TODO
-		pass
+		# determine linestring with more points		
+		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
+		num_left_pts = len(self.left_bound.linestring.coords)  # number of points in left bound linestring
+		if num_right_pts > num_left_pts:
+			more_pts_linestr = self.right_bound 
+			less_pts_linestr = self.left_bound 
+		else:
+			more_pts_linestr = self.left_bound
+			less_pts_linestr = self.right_bound
+
+		# connect points from linestring (with more points) to other linestring (one with less points)
+		# NOTE: connections do not necessarily lie on coordinates of other linestring, since projection and interpolation is used
+		more_pts_coords = more_pts_linestr.linestring.coords
+		for i in range(len(more_pts_coords) - 1):
+			curr_point = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
+			next_point = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound
+			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point))
+			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point))
+			cell_polygon = Polygon([curr_point, next_point, bound_pt_1, bound_pt_2])
+			cell_heading = math.atan((next_point.y - curr_point.y) / (next_point.x - curr_point.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+			cell = Cell(cell_polygon, cell_heading)
+			self.cells.append(cell)
 
 
 class Area():
@@ -186,6 +207,8 @@ class MapData:
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
 		# TODO
+		# find lanelet that contains point (if any)
+		# find first cell in lanelet that contains point (first because boundaries overlap)
 		pass
 		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
 
@@ -212,8 +235,13 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		for lanelet in self.lanelets.values():
-			lanelet.calculate_polygon()
-			__plot_polygon(lanelet.polygon)
+			
+			# TEST
+			for cell in lanelet.cells:
+				__plot_polygon(cell.polygon)
+
+			#lanelet.calculate_polygon()
+			#__plot_polygon(lanelet.polygon)
 
 		for area in self.areas.values():
 			area.calculate_polygon()
