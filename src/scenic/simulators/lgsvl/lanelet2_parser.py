@@ -81,14 +81,73 @@ class Lanelet():
 		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
 
-		# calculated fields
-		self.polygon = None
-		self.cells = []
+		# calculated fields to store property methods
+		self.__polygon = None
+		self.__cells = []
+
+	@property
+	def polygon(self):
+		if self.__polygon:
+			return self.__polygon
+
+		left_bound_coords = list(self.left_bound.linestring.coords)
+		right_bound_coords = list(self.right_bound.linestring.coords)
+
+		''' NOTE: 
+		(*)	Noticed that when always reversed the right bound, some of the
+		lanelet polygons were Z-shaped instead of rectangular.
+		(*)	Determined that there must not be a defined convention in the Lanelet2 format
+		for the order in which points were given.
+		(*)	Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
+		which can be determined by comparing the distance of the left bound vector-head
+		to the head and tail of the right bound vector. '''
+		left_head = Point(left_bound_coords[-1])  # last point of the left bound 
+		right_tail = Point(right_bound_coords[0])  # first point of the right bound
+		right_head = Point(right_bound_coords[-1])  # first point of the right bound
+		if left_head.distance(right_head) < left_head.distance(right_tail):
+			right_bound_coords.reverse()
+
+		left_bound_coords.extend(right_bound_coords)
+		self.__polygon = Polygon(left_bound_coords)
+		return self.__polygon
+
+	@property
+	def cells(self):
+		if self.__cells:
+			return self.__cells
+
+		# determine linestring with more points		
+		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
+		num_left_pts = len(self.left_bound.linestring.coords)  # number of points in left bound linestring
+		if num_right_pts > num_left_pts:
+			more_pts_linestr = self.right_bound.linestring
+			less_pts_linestr = self.left_bound.linestring 
+		else:
+			more_pts_linestr = self.left_bound.linestring
+			less_pts_linestr = self.right_bound.linestring
+
+		# connect points from linestring (with more points) to other linestring (one with less points)
+		# NOTE: heading defined by slope of line segements of linestring with more points
+		more_pts_coords = more_pts_linestr.coords
+		for i in range(len(more_pts_coords) - 1):
+			curr_point = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
+			next_point = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
+
+			# compute closes point (not necessarily a coordinate of) on other linestring
+			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point))
+			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point)) 
+
+			cell_polygon = Polygon([(p.x, p.y) for p in [curr_point, next_point, bound_pt_1, bound_pt_2]])
+
+			# FIXME: should not be able to define heading based on linestring, since linestring might be used for multiple lanes
+			cell_heading = math.atan((next_point.y - curr_point.y) / (next_point.x - curr_point.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+
+			cell = self.Cell(cell_polygon, cell_heading)
+			self.__cells.append(cell)
+		return self.__cells
 
 	def contains_point(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
-		if not self.polygon:
-			self.calculate_polygon()
 		return self.polygon.contains(point)
 
 	def heading_at(self, point):
@@ -97,52 +156,6 @@ class Lanelet():
 		cell = cells_with_point[0] if cells_with_point else None
 		assert cell, f'Point with coordinates x={point.x}, y={point.y} not in lanelet with id={self.id_}'
 		return cell.heading  # radians clockwise from y-axis
-
-	def calculate_polygon(self):
-		if not self.polygon:
-			left_bound_coords = list(self.left_bound.linestring.coords)
-			right_bound_coords = list(self.right_bound.linestring.coords)
-
-			''' NOTE: 
-			(*)	Noticed that when always reversed the right bound, some of the
-			lanelet polygons were Z-shaped instead of rectangular.
-			(*)	Determined that there must not be a defined convention in the Lanelet2 format
-			for the order in which points were given.
-			(*)	Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
-			which can be determined by comparing the distance of the left bound vector-head
-			to the head and tail of the right bound vector. '''
-			left_head = Point(left_bound_coords[-1])  # last point of the left bound 
-			right_tail = Point(right_bound_coords[0])  # first point of the right bound
-			right_head = Point(right_bound_coords[-1])  # first point of the right bound
-			if left_head.distance(right_head) < left_head.distance(right_tail):
-				right_bound_coords.reverse()
-
-			left_bound_coords.extend(right_bound_coords)
-			self.polygon = Polygon(left_bound_coords)
-
-	def calculate_cells(self):
-		# determine linestring with more points		
-		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
-		num_left_pts = len(self.left_bound.linestring.coords)  # number of points in left bound linestring
-		if num_right_pts > num_left_pts:
-			more_pts_linestr = self.right_bound 
-			less_pts_linestr = self.left_bound 
-		else:
-			more_pts_linestr = self.left_bound
-			less_pts_linestr = self.right_bound
-
-		# connect points from linestring (with more points) to other linestring (one with less points)
-		# NOTE: connections do not necessarily lie on coordinates of other linestring, since projection and interpolation is used
-		more_pts_coords = more_pts_linestr.linestring.coords
-		for i in range(len(more_pts_coords) - 1):
-			curr_point = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
-			next_point = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound
-			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point))
-			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point))
-			cell_polygon = Polygon([curr_point, next_point, bound_pt_1, bound_pt_2])
-			cell_heading = math.atan((next_point.y - curr_point.y) / (next_point.x - curr_point.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
-			cell = Cell(cell_polygon, cell_heading)
-			self.cells.append(cell)
 
 
 class Area():
@@ -154,26 +167,30 @@ class Area():
 		self.outer_linestrings = outer_linestrings
 		self.inner_linestrings = inner_linestrings
 
-		self.polygon = None  # store calculated polygon to avoid redundant calculations
+		self.__polygon = None  # store calculated polygon to avoid redundant calculations
 
-	def calculate_polygon(self):
-		if not self.polygon:
-			outer_bound_coords = []
-			for l2_linestring in self.outer_linestrings:
-				shapely_linestring = l2_linestring.linestring
-				outer_bound_coords.extend(shapely_linestring.coords)
+	@property
+	def polygon(self):
+		if self.__polygon:
+			return self.__polygon
 
-			inner_bound_coords = []
-			for l2_linestring in self.inner_linestrings:
-				shapely_linestring = l2_linestring.linestring
-				inner_bound_coords.extend(shapely_linestring.coords)
+		outer_bound_coords = []
+		for l2_linestring in self.outer_linestrings:
+			shapely_linestring = l2_linestring.linestring
+			outer_bound_coords.extend(shapely_linestring.coords)
 
-			# minimum 3 coordinates needed to define a polygon
-			if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
-				print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
-				self.polygon = Polygon()
+		inner_bound_coords = []
+		for l2_linestring in self.inner_linestrings:
+			shapely_linestring = l2_linestring.linestring
+			inner_bound_coords.extend(shapely_linestring.coords)
 
-			self.polygon = Polygon(outer_bound_coords, inner_bound_coords)
+		# minimum 3 coordinates needed to define a polygon
+		if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
+			print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
+			self.__polygon = Polygon()
+
+		self.__polygon = Polygon(outer_bound_coords, inner_bound_coords)
+		return self.__polygon
 
 
 class RegulatoryElement():
@@ -199,25 +216,30 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# high-level representation (calculated field)
-		self.drivable_polygon = None  # single Shapely Polygon of drivable region
+		# single Shapely Polygon of drivable region
+		self.__drivable_polygon = None  # store calculated polygon to avoid redundant calculations
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
+	@property
+	def drivable_polygon(self):
+		if self.__drivable_polygon:
+			return self.__drivable_polygon
+
+		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values()]
+		self.__drivable_polygon = cascaded_union(lanelet_polygons)
+		return self.__drivable_polygon
+
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
-		# TODO
-		# find lanelet that contains point (if any)
-		# find first cell in lanelet that contains point (first because boundaries overlap)
-		pass
+		for lanelet in self.lanelets:
+			if lanelet.contains_point(point):
+				for cell in lanelet.cells:
+					if cell.contains_point(point):
+						return cell.heading
+				raise RuntimeError(f'Error finding point with coordinates x={point.x}, y={point.y} in cells of lanelet with id={lanelet.id_}')
 		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
-
-	def calculate_drivable_polygon(self):
-		''' Calculate a single Shapely Polygon that represents the entire drivable region '''
-
-		lanelet_polygons = [lanelet.calculate_polygon() for lanelet in self.lanelets]
-		self.drivable_polygon = cascaded_union(lanelet_polygons)
 
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
@@ -235,17 +257,18 @@ class MapData:
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon)
 
+		# NOTE: uncomment to see drivable region
+		#__plot_polygon(self.drivable_polygon)
+
 		for lanelet in self.lanelets.values():
 			
-			# TEST
+			# NOTE: uncomment to see cells
 			for cell in lanelet.cells:
 				__plot_polygon(cell.polygon)
 
-			#lanelet.calculate_polygon()
 			#__plot_polygon(lanelet.polygon)
 
 		for area in self.areas.values():
-			area.calculate_polygon()
 			__plot_polygon(area.polygon)
 
 		plt.show()

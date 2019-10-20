@@ -7,11 +7,9 @@ class LGSVLWorkspace(Workspace):
 	def __init__(self, path):
 		self.road_map = parser.MapData()
 		self.road_map.parse(path)
-		self.road_map.calculate_drivable_polygon()
-		drivable_poly = self.road_map.drivable_polygon
-		# TODO: eventually want to compute sidewalk polygon too
+		# TODO: eventually want to compute sidewalk regions
 		self.road_direction = VectorField('Road Direction', self.road_map.heading_at)  # heading_at is a function
-		self.drivable_region = PolygonalRegion(polygon=drivable_poly, orientation=self.road_direction,)
+		self.drivable_region = PolygonalRegion(polygon=self.road_map.drivable_polygon, orientation=self.road_direction)
 
 	def show(self, plt):
 		pass
