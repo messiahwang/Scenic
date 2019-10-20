@@ -93,9 +93,10 @@ class Lanelet():
 
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
-		cell_with_point = [cell for cell in cells if cell.contains_point(point)][0] else None
-		assert cell_with_point, f'Point with coordinates x={point.x}, y={point.y} not in lanelet with id={self.id_}'
-		return cell_with_point.heading  # radians clockwise from y-axis
+		cells_with_point = [cell for cell in self.cells if cell.contains_point(point)]
+		cell = cells_with_point[0] if cells_with_point else None
+		assert cell, f'Point with coordinates x={point.x}, y={point.y} not in lanelet with id={self.id_}'
+		return cell.heading  # radians clockwise from y-axis
 
 	def calculate_polygon(self):
 		if not self.polygon:
@@ -170,7 +171,7 @@ class Area():
 			# minimum 3 coordinates needed to define a polygon
 			if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
 				print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
-				self.polygon Polygon()
+				self.polygon = Polygon()
 
 			self.polygon = Polygon(outer_bound_coords, inner_bound_coords)
 
