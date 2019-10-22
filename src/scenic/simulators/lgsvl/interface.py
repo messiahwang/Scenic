@@ -8,6 +8,7 @@ class LGSVLWorkspace(Workspace):
 		self.road_map = parser.MapData()
 		self.road_map.parse(path)
 		# TODO: eventually want to compute sidewalk regions
+		# TODO: use polygonalVectorField
 		self.road_direction = VectorField('Road Direction', self.road_map.heading_at)  # heading_at is a function
 		self.drivable_region = PolygonalRegion(polygon=self.road_map.drivable_polygon, orientation=self.road_direction)
 
