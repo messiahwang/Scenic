@@ -132,17 +132,17 @@ class Lanelet():
 		# NOTE: heading defined by slope of line segements of linestring with more points
 		more_pts_coords = more_pts_linestr.coords
 		for i in range(len(more_pts_coords) - 1):
-			curr_point = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
-			next_point = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
+			curr_pt = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
+			next_pt = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
 
 			# compute closes point (not necessarily a coordinate of) on other linestring
-			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_point))
-			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_point)) 
+			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
+			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_pt)) 
 
-			cell_polygon = Polygon([(p.x, p.y) for p in [curr_point, next_point, bound_pt_1, bound_pt_2]])
+			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
 			# FIXME: should not be able to define heading based on linestring, since linestring might be used for multiple lanes
-			cell_heading = math.atan((next_point.y - curr_point.y) / (next_point.x - curr_point.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
@@ -210,7 +210,6 @@ class MapData:
 	data types of the Lanelet2 framework'''
 
 	def __init__(self):
-
 		# low-level data
 		self.points = {}  # L2_Points
 		self.linestrings = {}  #L2_Linestrings
@@ -219,7 +218,7 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# single Shapely Polygon of drivable region
+		# single Shapely Polygon or MultiPolygon of drivable region
 		self.__drivable_polygon = None  # store calculated polygon to avoid redundant calculations
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
@@ -248,48 +247,78 @@ class MapData:
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
-		# MARK : - HELPER METHODS
+		# # # # # # # # # # # # # # 
+		# MARK : - HELPER METHODS #
+		# # # # # # # # # # # # # #
 
-		def __plot_polygon(polygon, c=c):
-			''' Code from Wilson Wu's OpenDrive parser '''
+		def __plot_polygon(polygon, just_points=False, c=c):
+			if just_points:
+				__plot_polygon_points(polygon, c=c)
+				return
+
 			if not polygon.exterior:
 				return
-			x, y = polygon.exterior.xy
+
+			x, y = polygon.exterior.coords.xy
 			plt.plot(x, y, c=c)
+
 			for interior in polygon.interiors:
-				x, y = interior.xy
+				x, y = interior.coords.xy
 				plt.plot(x, y, c=c)
 
-		def __plot_multipolygon(multipolygon):
+		def __plot_multipolygon(multipolygon, just_points=False):
 			for i, polygon in enumerate(multipolygon):
-				__plot_polygon(polygon, c='b' if i % 2 else 'r')
+				__plot_polygon(polygon, just_points, c=['r', 'b', 'g', 'c', 'm', 'y', 'k'][i % 7])  # to differentiate polygons by color
 
-		def __plot_drivable_polygon():
+		def __plot_drivable_polygon(just_points=False):
 			# NOTE: checking type since cascaded union, which was used to compute drivable polygon, can return Polygon or MultiPolygon
 			if isinstance(self.drivable_polygon, MultiPolygon):
-				__plot_multipolygon(self.drivable_polygon)
+				__plot_multipolygon(self.drivable_polygon, just_points)
 			elif isinstance(self.drivable_polygon, Polygon):
-				__plot_polygon(self.drivable_polygon)
+				__plot_polygon(self.drivable_polygon, just_points)
 			else:
 				raise RuntimeError(f'Drivable polygon has unhandled type={type(self.drivable_polygon)}')
 
-		def __plot_lanelet_cells(lanelet):
+		def __plot_lanelet_cells(lanelet, just_points=False):
 			for cell in lanelet.cells:
-				__plot_polygon(cell.polygon)
+				__plot_polygon(cell.polygon, just_points)
 
-		# MARK: - PLOTTING
+		# NOTE: for testing purposes
+		def __plot_polygon_points(polygon, c=c):
+			''' Plots polygon's exterior points in red and interior points in blue '''
+
+			if not polygon.exterior:
+				return
+
+			x, y = polygon.exterior.coords.xy
+			coords_map = zip(x, y)
+			for coord in coords_map:
+				plt.plot(coord[0], coord[1], marker='x', c='r')
+
+			for interior in polygon.interiors:
+				x, y = interior.coords.xy
+				coords_map = zip(x, y)
+				for coord in coords_map:
+					plt.plot(coord[0], coord[1], marker='x', c='b')
+
+		# # # # # # # # # # # 
+		# MARK: - PLOTTING  #
+		# # # # # # # # # # # 
 
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		#__plot_drivable_polygon()
+		__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
-			__plot_polygon(lanelet.polygon)
+			# NOTE: comment when trying see only drivable region
+			#__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
+
+			continue  # to avoid error if empty for-loop
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
@@ -299,7 +328,9 @@ class MapData:
 	def parse(self, path):
 		''' Parse OSM-XML file that fulfills the Lanelet2 framework '''
 
-		# MARK: - HELPER METHODS
+		# # # # # # # # # # # # # # 
+		# MARK : - HELPER METHODS #
+		# # # # # # # # # # # # # #
 
 		def __extract_point(id_, x, y, z, type_, subtype):
 			shapely_point = Point(x, y, z) if z else Point(x, y)
@@ -367,7 +398,9 @@ class MapData:
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
 
-		# MARK: - PARSING
+		# # # # # # # # # # #
+		# MARK : - PARSING  #
+		# # # # # # # # # # #
 
 		tree = ET.parse(path)
 		root = tree.getroot()
@@ -399,8 +432,6 @@ class MapData:
 			__extract_point(node_id, node_lat, node_lon, ele_tag, type_tag, subtype_tag)
 
 		for way in root.iter('way'):
-			# TODO: Check if nodes defined in way, and if they're distinct from nodes defined in root
-			
 			way_id = int(way.get('id'))
 			__ref_point_ids = [int(point.get('ref')) for point in way.findall('nd')]
 			__ref_points = [self.points[id_] for id_ in __ref_point_ids]
