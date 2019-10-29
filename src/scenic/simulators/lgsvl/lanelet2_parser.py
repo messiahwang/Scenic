@@ -141,8 +141,9 @@ class Lanelet():
 
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
-			# FIXME: should not be able to define heading based on linestring, since linestring might be used for multiple lanes
+			# FIXME
 			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+			# (assuming) can define heading based on lanelet's right bound
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
@@ -309,11 +310,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		__plot_drivable_polygon()
+		#__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
