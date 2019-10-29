@@ -237,7 +237,7 @@ class MapData:
 
 	def heading_at(self, point):
 		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
-		for lanelet in self.lanelets:
+		for lanelet in self.lanelets.values():
 			if lanelet.contains_point(point):
 				for cell in lanelet.cells:
 					if cell.contains_point(point):

@@ -1,7 +1,7 @@
 import scenic.simulators.lgsvl.lanelet2_parser as parser
 from scenic.core.workspaces import Workspace 
 from scenic.core.regions import PolygonalRegion
-from scenic.core.vectors import PolygonalVectorField
+from scenic.core.vectors import VectorField
 
 """ 
 	Inteface between Scenic and LGSVL Simulator:
