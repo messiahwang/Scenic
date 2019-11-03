@@ -83,7 +83,7 @@ class Lanelet():
 		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
 
-		# calculated fields to store property methods
+		# calculated fields for property methods
 		self.__polygon = None
 		self.__cells = []
 
@@ -219,8 +219,9 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
-		# single Shapely Polygon or MultiPolygon of drivable region
-		self.__drivable_polygon = None  # store calculated polygon to avoid redundant calculations
+		# calculate fields for property methods
+		self.__drivable_polygon = None  # for interface's drivable polygonal region 
+		self.__cells = []    # for interface's polygonal vector field
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
 		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
@@ -235,15 +236,17 @@ class MapData:
 
 		return self.__drivable_polygon
 
-	def heading_at(self, point):
-		point = Point(point.x, point.y) if not isinstance(point, Point) else point # convert to Shapely Point if necessary
+	@property
+	def cells(self):
+		if self.__cells:
+			return self.__cells
+
 		for lanelet in self.lanelets.values():
-			if lanelet.contains_point(point):
-				for cell in lanelet.cells:
-					if cell.contains_point(point):
-						return cell.heading
-				raise RuntimeError(f'Error finding point with coordinates x={point.x}, y={point.y} in cells of lanelet with id={lanelet.id_}')
-		raise RuntimeError(f'Heading not defined at point with coordinates x={point.x}, y={point.y}')
+			for cell in lanelet.cells:
+				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
+				self.__cells.append(cell_heading)
+
+		return self.__cells
 
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''

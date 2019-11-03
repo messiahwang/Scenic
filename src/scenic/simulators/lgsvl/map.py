@@ -8,3 +8,4 @@ def setMapPath(module, relpath):
 	global mapPath
 	base = os.path.dirname(module)
 	mapPath = os.path.join(base, relpath)
+	

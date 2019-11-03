@@ -30,7 +30,8 @@ road = workspace.drivable_region
 # # # # # # # # # # # # # # # # # #
 
 constructor LGSVLObject:
-	pass
+	lgsvlObject = None
+	elevation = None
 
 constructor Car(LGSVLObject):
 	regionContainedIn: road
@@ -46,6 +47,10 @@ constructor Car(LGSVLObject):
 	viewAngle: 90 deg
 	cameraOffset: 0 @ (self.height / 2)		# camera is at the front
 	color: CarColor.defaultColor()
+	lgsvlName
+	lgsvlAgentType
+
+	EgoCar(Car)
 	'''
 
 constructor Pedestrian(LGSVLObject):
