@@ -38,20 +38,12 @@ constructor Car(LGSVLObject):
 	position: Point on road
 	heading: (roadDirection at self.position) + self.roadDeviation
 	roadDeviation: 0
-	''' TODO: fill out below according to LGSVL specs
+	lgsvlName: 'Sedan'
+	lgsvlAgentType: AgentType.NPC
 
-	model: Uniform(*carModels)
-	width: self.model.width
-	height: self.model.height
-	webotsType: self.model.name
-	viewAngle: 90 deg
-	cameraOffset: 0 @ (self.height / 2)		# camera is at the front
-	color: CarColor.defaultColor()
-	lgsvlName
-	lgsvlAgentType
-
-	EgoCar(Car)
-	'''
+constructor EgoCar(Car):
+	lgsvlName: 'Jaguar2015XE (Apollo 3.0)'
+	lgsvlAgentType: AgentType.EGO
 
 constructor Pedestrian(LGSVLObject):
 	regionContainedIn: road
@@ -59,9 +51,5 @@ constructor Pedestrian(LGSVLObject):
 	heading: (0, 360) deg
 	width: 0.5
 	height: 0.5
-	''' TODO: fill out below  according to LGSVL specs
-
-	shirtColor: CarColor.uniformColor()
-	pantsColor: CarColor.uniformColor()
-	shoesColor: CarColor.uniformColor()
-	'''
+	lgsvlName: 'Bob'
+	lgsvlAgentType: AgentType.PEDESTRIAN
