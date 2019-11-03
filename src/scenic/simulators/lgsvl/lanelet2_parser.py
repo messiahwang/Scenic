@@ -61,10 +61,6 @@ class Lanelet():
 			self.polygon = polygon  # Shapely polygon
 			self.heading = heading  # radians clockwise from y-axis
 
-		def contains_point(self, point):
-			point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
-			return polygon.contains(point)
-
 
 	def __init__(self, id_, subtype, 
 					region, location, one_way, turn_direction,
@@ -141,24 +137,13 @@ class Lanelet():
 
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
-			# FIXME
+			# FIXME: (assuming) can define heading based on lanelet's right bound
 			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
-			# (assuming) can define heading based on lanelet's right bound
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self.__cells.append(cell)
+
 		return self.__cells
-
-	def contains_point(self, point):
-		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
-		return self.polygon.contains(point)
-
-	def heading_at(self, point):
-		point = Point(point.x, point.y) if not isinstance(point, Point) else point  # convert to Shapely point if necessary
-		cells_with_point = [cell for cell in self.cells if cell.contains_point(point)]
-		cell = cells_with_point[0] if cells_with_point else None
-		assert cell, f'Point with coordinates x={point.x}, y={point.y} not in lanelet with id={self.id_}'
-		return cell.heading  # radians clockwise from y-axis
 
 
 class Area():
@@ -313,11 +298,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		#__plot_drivable_polygon()
+		__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			__plot_polygon(lanelet.polygon)
+			#__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
@@ -512,3 +497,4 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
+		
