@@ -80,13 +80,13 @@ class Lanelet():
 		self.regulatory_elements = regulatory_elements
 
 		# calculated fields for property methods
-		self.__polygon = None
-		self.__cells = []
+		self._polygon = None
+		self._cells = []
 
 	@property
 	def polygon(self):
-		if self.__polygon:
-			return self.__polygon
+		if self._polygon:
+			return self._polygon
 
 		left_bound_coords = list(self.left_bound.linestring.coords)
 		right_bound_coords = list(self.right_bound.linestring.coords)
@@ -106,13 +106,14 @@ class Lanelet():
 			right_bound_coords.reverse()
 
 		left_bound_coords.extend(right_bound_coords)
-		self.__polygon = Polygon(left_bound_coords)
-		return self.__polygon
+		self._polygon = Polygon(left_bound_coords)#.buffer(1e-6)  # NOTE: Buffer to account for misaligned lanelets
+
+		return self._polygon
 
 	@property
 	def cells(self):
-		if self.__cells:
-			return self.__cells
+		if self._cells:
+			return self._cells
 
 		# determine linestring with more points		
 		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
@@ -138,12 +139,13 @@ class Lanelet():
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
 
 			# FIXME: (assuming) can define heading based on lanelet's right bound
-			cell_heading = math.atan((next_pt.y - curr_pt.y) / (next_pt.x - curr_pt.x)) + math.pi / 2  # since headings in radians clockwise from y-axis
+			delta_x = next_pt.x - curr_pt.x
+			cell_heading = math.atan((next_pt.y - curr_pt.y) / delta_x) + math.pi / 2 if delta_x else 0 # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
-			self.__cells.append(cell)
+			self._cells.append(cell)
 
-		return self.__cells
+		return self._cells
 
 
 class Area():
@@ -155,12 +157,12 @@ class Area():
 		self.outer_linestrings = outer_linestrings
 		self.inner_linestrings = inner_linestrings
 
-		self.__polygon = None  # store calculated polygon to avoid redundant calculations
+		self._polygon = None  # store calculated polygon to avoid redundant calculations
 
 	@property
 	def polygon(self):
-		if self.__polygon:
-			return self.__polygon
+		if self._polygon:
+			return self._polygon
 
 		outer_bound_coords = []
 		for l2_linestring in self.outer_linestrings:
@@ -175,11 +177,11 @@ class Area():
 		# minimum 3 coordinates needed to define a polygon
 		if len(outer_bound_coords) < 3 or (inner_bound_coords and len(inner_bound_coords) < 3):
 			print(f'Area with id={self.id_} does not have at least 3 coordinate tuples')
-			self.__polygon = Polygon()
+			self._polygon = Polygon()
 		else:
-			self.__polygon = Polygon(outer_bound_coords, inner_bound_coords)
+			self._polygon = Polygon(outer_bound_coords, inner_bound_coords)
 
-		return self.__polygon
+		return self._polygon
 
 
 class RegulatoryElement():
@@ -205,34 +207,35 @@ class MapData:
 		self.regulatory_elements = {}
 
 		# calculate fields for property methods
-		self.__drivable_polygon = None  # for interface's drivable polygonal region 
-		self.__cells = []    # for interface's polygonal vector field
+		self._drivable_polygon = None  # for interface's drivable polygonal region 
+		self._cells = []    # for interface's polygonal vector field
 
 		# store id's of regulatory elements to add to a lanelet objects after parsing completes (such that the regulatory elements have been processed)
-		self.__todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
+		self._todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	@property
-	def drivable_polygon(self):
-		if self.__drivable_polygon:
-			return self.__drivable_polygon
+	def drivable_polygon(self, buffer_=1e-6):
+		if self._drivable_polygon:
+			return self._drivable_polygon
 
-		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values()]
-		self.__drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
+		# NOTE: Buffer to account for misaligned lanelets
+		lanelet_polygons = [lanelet.polygon.buffer(buffer_) for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
+		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
-		return self.__drivable_polygon
+		return self._drivable_polygon
 
 	@property
 	def cells(self):
-		if self.__cells:
-			return self.__cells
+		if self._cells:
+			return self._cells
 
 		for lanelet in self.lanelets.values():
 			for cell in lanelet.cells:
 				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
-				self.__cells.append(cell_heading)
+				self._cells.append(cell_heading)
 
-		return self.__cells
-
+		return self._cells 
+							
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
@@ -298,11 +301,11 @@ class MapData:
 			__plot_polygon(poly.polygon)
 
 		# NOTE: uncomment to see drivable region
-		__plot_drivable_polygon()
+		#__plot_drivable_polygon()
 
 		for lanelet in self.lanelets.values():
 			# NOTE: comment when trying see only drivable region
-			#__plot_polygon(lanelet.polygon)
+			__plot_polygon(lanelet.polygon)
 			
 			# NOTE: uncomment to see lanelet cells
 			#__plot_lanelet_cells(lanelet)
@@ -351,7 +354,7 @@ class MapData:
 						reg_elem = self.regulatory_elements[ref_id]
 						lanelet.regulatory_elements.append(reg_elem)
 					except:
-					 	self.__todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
+					 	self._todo_lanelets_regelems.append((id_, ref_id))  # regulatory element not yet parsed -> add after parsing complete
 				else:
 					raise RuntimeError(f'Unknown member role in lanelet with id={id_}')
 
@@ -379,13 +382,69 @@ class MapData:
 			self.regulatory_elements[id_] = RegulatoryElement(id_, subtype, fallback)
 
 		def __execute_todo():
-			for lanelet_id, reg_elem_id in self.__todo_lanelets_regelems:
+			for lanelet_id, reg_elem_id in self._todo_lanelets_regelems:
 				try:
 					lanelet = self.lanelets[lanelet_id]
 					reg_elem = self.regulatory_elements[reg_elem_id]
 					lanelet.regulatory_elements.append(reg_elem)
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
+
+		def __align_lanelets(percent_err=1):
+			''' Align lanelet bounds to overlap exactly '''
+
+			bounds = self.drivable_polygon.bounds  # (minx, miny, maxx, maxy)
+			greater_dim = max(bounds[2] - bounds[0], bounds[3] - bounds[1])
+			min_dist = greater_dim * percent_err / 100  # minimum distance two points before being combined
+
+			lanelets = [v for v in self.lanelets.values()]
+			for i in range(len(lanelets) - 1):
+				curr = lanelets[i]
+				curr_left = list(curr.left_bound.linestring.coords)
+				curr_right = list(curr.right_bound.linestring.coords)
+				curr_bound_pts = tuple(Point(coords) for coords in (curr_left[0], curr_left[-1], curr_right[0], curr_right[-1]))
+
+				for j in range(i + 1, len(lanelets)):
+					other = lanelets[j]
+					other_left = list(other.left_bound.linestring.coords)
+					other_right = list(other.right_bound.linestring.coords)
+					other_bound_pts = tuple(Point(coords) for coords in (other_left[0], other_left[-1], other_right[0], other_right[-1]))
+
+					for u in range(len(curr_bound_pts)):
+						curr_pt = curr_bound_pts[u]
+
+						for k in range(len(other_bound_pts)):
+							other_pt = other_bound_pts[k]
+							dist = curr_pt.distance(other_pt)
+
+							if dist != 0 and dist < min_dist:
+								avg_x = (curr_pt.x + other_pt.x) / 2
+								avg_y = (curr_pt.y + other_pt.y) / 2
+
+								if u == 0 or u == 1:  # replace left bound coordinates
+									new_coords = curr_left
+									new_coords[0 if u == 0 else -1] = (avg_x, avg_y)
+									curr.left_bound.linestring = LineString(new_coords)
+								else:  # replace right bound coordinates
+									new_coords = curr_right
+									new_coords[0 if u == 2 else -1] = (avg_x, avg_y)
+									curr.right_bound.linestring = LineString(new_coords)
+
+								if k == 0 or k == 1:  # replace left bound coordinates
+									new_coords = other_left
+									new_coords[0 if k == 0 else -1] = (avg_x, avg_y)
+									other.left_bound.linestring = LineString(new_coords)
+								else:  # replace right bound coordinates
+									new_coords = other_right
+									new_coords[0 if k == 2 else -1] = (avg_x, avg_y)
+									other.right_bound.linestring = LineString(new_coords)
+
+			# re-compute polygons
+			for lanelet in self.lanelets.values():
+				#lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
+				assert lanelet.polygon
+			self._drivable_polygon = None
+			assert self.drivable_polygon
 
 		# # # # # # # # # # #
 		# MARK : - PARSING  #
@@ -416,7 +475,8 @@ class MapData:
 				elif key == 'ele':
 					ele_tag = float(value)
 				else:
-					print(f'Unhandled node tag with key={key}')
+					#print(f'Unhandled node tag with key={key}')
+					continue
 
 			__extract_point(node_id, node_lat, node_lon, ele_tag, type_tag, subtype_tag)
 
@@ -497,4 +557,4 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-		
+		__align_lanelets()  # ensure lanelet endpoints overlap exactly
