@@ -26,5 +26,5 @@ class LGSVLWorkspace(Workspace):
 		self.road_map.plot()
 
 	@property
-    def minimumZoomSize(self):
-        return 100
+	def minimumZoomSize(self):
+		return 100

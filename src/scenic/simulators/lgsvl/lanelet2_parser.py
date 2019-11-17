@@ -20,9 +20,10 @@ class L2_Point:
 	''' Point representation of Lanelet2 Point primitive type
 	using Shapely's Point class '''
 
-	def __init__(self, id_, point, type_, subtype):
+	def __init__(self, id_, metric_point, geo_point, type_, subtype):
 		self.id_ = id_
-		self.point = point  # Shapely Point
+		self.point = metric_point  # (Shapely Point) in meters
+		self.geo_point = geo_point  # (Shapely Point) store x=longitude, y=latitude data
 		self.type_ = type_
 		self.subtype = subtype
 
@@ -206,6 +207,9 @@ class MapData:
 		self.areas = {}
 		self.regulatory_elements = {}
 
+		# store (lon, lat) as origin for reference when converting to meters
+		self._origin = None
+
 		# calculate fields for property methods
 		self._drivable_polygon = None  # for interface's drivable polygonal region 
 		self._cells = []    # for interface's polygonal vector field
@@ -218,7 +222,7 @@ class MapData:
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		# NOTE: Buffer to account for misaligned lanelets
+		# NOTE: buffer to account for misaligned lanelets
 		lanelet_polygons = [lanelet.polygon.buffer(buffer_) for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
 		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
@@ -234,8 +238,8 @@ class MapData:
 				cell_heading = (cell.polygon, cell.heading)  # polygonal vector field takes a list of (polygon, heading) tuples
 				self._cells.append(cell_heading)
 
-		return self._cells 
-							
+		return self._cells
+				
 	def plot(self, c='r'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
@@ -324,9 +328,24 @@ class MapData:
 		# MARK : - HELPER METHODS #
 		# # # # # # # # # # # # # #
 
-		def __extract_point(id_, x, y, z, type_, subtype):
-			shapely_point = Point(x, y, z) if z else Point(x, y)
-			self.points[id_] = L2_Point(id_, shapely_point, type_, subtype)
+		def __extract_point(id_, lon, lat, x, y, z, type_, subtype):
+			''' Converts longitude and latitude to meters if x and y are unspecified'''
+
+			if x and y:
+				shapely_metric_point = Point(x, y, z) if z else Point(x, y)
+			elif not self._origin:
+				self._origin = (lon, lat)
+				shapely_metric_point = Point(0, 0, 0) if z else Point(0, 0)
+			else:
+				# NOTE: lon/lat to meters calculation from https://stackoverflow.com/questions/3024404/transform-longitude-latitude-into-meters
+				deltaLon = lon - self._origin[0]
+				deltaLat = lat - self._origin[1]
+				x = deltaLon * 40075160 * math.cos(self._origin[1] * math.pi / 180) / 360
+				y = deltaLat * 40008000 / 360
+				shapely_metric_point = Point(x, y, z) if z else Point(x, y)
+
+			shapely_geo_point = Point(lon, lat)
+			self.points[id_] = L2_Point(id_, shapely_metric_point, shapely_geo_point, type_, subtype)
 
 		def __extract_polygon(id_, polygon_coords, type_, subtype):
 			shapely_polygon = Polygon(polygon_coords)
@@ -458,12 +477,14 @@ class MapData:
 
 		for node in root.iter('node'):
 			node_id = int(node.get('id'))
-			node_lat = float(node.get('lat'))
 			node_lon = float(node.get('lon'))
+			node_lat = float(node.get('lat'))
 
 			type_tag = None
 			subtype_tag = None
 			ele_tag = None
+			x_tag = None
+			y_tag = None 
 			for tag in node.iter('tag'):
 				key = tag.get('k')
 				value = tag.get('v')
@@ -474,11 +495,14 @@ class MapData:
 					subtype_tag = value
 				elif key == 'ele':
 					ele_tag = float(value)
+				elif key == 'x':
+					x_tag	= float(value)
+				elif key == 'y':
+					y_tag = float(value)
 				else:
-					#print(f'Unhandled node tag with key={key}')
-					continue
+					print(f'Unhandled node tag with key={key}')
 
-			__extract_point(node_id, node_lat, node_lon, ele_tag, type_tag, subtype_tag)
+			__extract_point(node_id, node_lat, node_lon, x_tag, y_tag, ele_tag, type_tag, subtype_tag)
 
 		for way in root.iter('way'):
 			way_id = int(way.get('id'))

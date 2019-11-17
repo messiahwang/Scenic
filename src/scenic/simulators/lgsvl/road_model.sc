@@ -1,5 +1,6 @@
 import math
 import time
+import lgsvl
 from scenic.simulators.lgsvl.interface import LGSVLWorkspace
 from scenic.simulators.lgsvl.map import mapPath
 
@@ -39,11 +40,11 @@ constructor Car(LGSVLObject):
 	heading: (roadDirection at self.position) + self.roadDeviation
 	roadDeviation: 0
 	lgsvlName: 'Sedan'
-	lgsvlAgentType: AgentType.NPC
+	lgsvlAgentType: lgsvl.AgentType.NPC
 
 constructor EgoCar(Car):
 	lgsvlName: 'Jaguar2015XE (Apollo 3.0)'
-	lgsvlAgentType: AgentType.EGO
+	lgsvlAgentType: lgsvl.AgentType.EGO
 
 constructor Pedestrian(LGSVLObject):
 	regionContainedIn: road
@@ -52,4 +53,4 @@ constructor Pedestrian(LGSVLObject):
 	width: 0.5
 	height: 0.5
 	lgsvlName: 'Bob'
-	lgsvlAgentType: AgentType.PEDESTRIAN
+	lgsvlAgentType: lgsvl.AgentType.PEDESTRIAN

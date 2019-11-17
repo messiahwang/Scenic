@@ -4,7 +4,7 @@ import os.path
 
 mapPath = None
 
-def setMapPath(module, relpath):
+def setLocalMap(module, relpath):
 	global mapPath
 	base = os.path.dirname(module)
 	mapPath = os.path.join(base, relpath)
