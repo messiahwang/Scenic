@@ -1,5 +1,5 @@
 import scenic.simulators.lgsvl.map
-scenic.simulators.lgsvl.map.mapPath = '/Users/francisindaheng/Desktop/Francis/VeHICaL/Code/Z - DO_NOT_DISTRIBUTE/lanelet2.osm'
+scenic.simulators.lgsvl.map.mapPath = '/Users/francisindaheng/Desktop/Francis/VeHICaL/Code/Z_DO_NOT_DISTRIBUTE/lanelet2.osm'
 
 from scenic.simulators.lgsvl.road_model import *
 
@@ -16,5 +16,3 @@ from scenic.simulators.lgsvl.road_model import *
 """
 
 ego = Car
-
-

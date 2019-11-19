@@ -22,7 +22,7 @@ class LGSVLWorkspace(Workspace):
 		self.road_direction = PolygonalVectorField('Road Direction', self.road_map.cells)
 		self.drivable_region = PolygonalRegion(polygon=self.road_map.drivable_polygon, orientation=self.road_direction)
 
-	def show(self):
+	def show(self, plt):
 		self.road_map.plot()
 
 	@property
