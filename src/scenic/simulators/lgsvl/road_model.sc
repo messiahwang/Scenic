@@ -37,8 +37,10 @@ constructor LGSVLObject:
 constructor Car(LGSVLObject):
 	regionContainedIn: road
 	position: Point on road
-	heading: (roadDirection at self.position) + self.roadDeviation
 	roadDeviation: 0
+	heading: (roadDirection at self.position) + self.roadDeviation
+	width: 1  # NOTE: does 1x1 make sense, given a pedestrian is 0.5x0.5?
+	height: 1
 	lgsvlName: 'Sedan'
 	lgsvlAgentType: lgsvl.AgentType.NPC
 

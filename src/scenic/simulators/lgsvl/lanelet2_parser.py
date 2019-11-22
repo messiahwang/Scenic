@@ -16,6 +16,8 @@ from shapely.ops import cascaded_union
 	groups, projects, and persons.
 """
 
+# NOTE: undefined region in PolygonalVectorField could be because buffer in drivable_region but not cell/lanelet
+
 class L2_Point:
 	''' Point representation of Lanelet2 Point primitive type
 	using Shapely's Point class '''
@@ -66,7 +68,8 @@ class Lanelet():
 	def __init__(self, id_, subtype, 
 					region, location, one_way, turn_direction,
 					vehicle_participant, pedestrian_participant, bicycle_participant, 
-					left_bound=None, right_bound=None, centerline=None, regulatory_elements=[]):
+					left_bound=None, right_bound=None, centerline=None, 
+					regulatory_elements=[], buffer_=0):
 		self.id_ = id_
 		self.subtype = subtype
 		self.region = region
@@ -79,6 +82,7 @@ class Lanelet():
 		self.right_bound = right_bound  # L2_Linestring
 		self.centerline = centerline  # L2_Linestring
 		self.regulatory_elements = regulatory_elements
+		self.buffer_ = buffer_
 
 		# calculated fields for property methods
 		self._polygon = None
@@ -86,6 +90,13 @@ class Lanelet():
 
 	@property
 	def polygon(self):
+		if not self._polygon:
+			self._polygon = cascaded_union([cell.polygon for cell in self.cells])  # returns either a Shapely Polygon or MultiPolygon
+		return self._polygon
+
+		"""
+		NOTE: old method of computing polygon from linestrings -- changed to taking a cascading union of cells
+
 		if self._polygon:
 			return self._polygon
 
@@ -107,9 +118,10 @@ class Lanelet():
 			right_bound_coords.reverse()
 
 		left_bound_coords.extend(right_bound_coords)
-		self._polygon = Polygon(left_bound_coords)#.buffer(1e-6)  # NOTE: Buffer to account for misaligned lanelets
+		self._polygon = Polygon(left_bound_coords)
 
 		return self._polygon
+		"""
 
 	@property
 	def cells(self):
@@ -133,11 +145,24 @@ class Lanelet():
 			curr_pt = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
 			next_pt = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
 
-			# compute closes point (not necessarily a coordinate of) on other linestring
-			bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
-			bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_pt)) 
+			# compute closes point on other linestring
+			# endpoints guarantee other point is a coordinate of linestring
+			# middle points project to points not necessarily coordiantes of linestring
+			if i == 0:
+				bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
+				pt_1 = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  # first point of linestring with less points
+				pt_neg_1 = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  # last point of linestring with less points
+				bound_pt_2 = pt_1 if next_pt.distance(pt_1) < next_pt.distance(pt_neg_1) else pt_neg_1
+			elif i == (len(more_pts_coords) - 1):
+				pt_1 = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  # first point of linestring with less points
+				pt_neg_1 = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  # last point of linestring with less points
+				bound_pt_1 = pt_1 if next_pt.distance(pt_1) < next_pt.distance(pt_neg_1) else pt_neg_1
+				bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_pt)) 
+			else:
+				bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
+				bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_pt))
 
-			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]])
+			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]]).buffer(self.buffer_)
 
 			# FIXME: (assuming) can define heading based on lanelet's right bound
 			delta_x = next_pt.x - curr_pt.x
@@ -198,7 +223,7 @@ class MapData:
 	''' Parses an OSM-XML file to extract primitive 
 	data types of the Lanelet2 framework'''
 
-	def __init__(self):
+	def __init__(self, buffer_=0):
 		# low-level data
 		self.points = {}  # L2_Points
 		self.linestrings = {}  #L2_Linestrings
@@ -206,6 +231,9 @@ class MapData:
 		self.lanelets = {}
 		self.areas = {}
 		self.regulatory_elements = {}
+
+		# optional buffer to avoid minor imprecisions
+		self.buffer_ = buffer_
 
 		# store (lon, lat) as origin for reference when converting to meters
 		self._origin = None
@@ -218,12 +246,11 @@ class MapData:
 		self._todo_lanelets_regelems = []  # list of tuples in the form: (lanelet id, regulatory_element id)
 
 	@property
-	def drivable_polygon(self, buffer_=0.1):  # buffer_=1e-6 if in latitude/longitude
+	def drivable_polygon(self): 
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		# NOTE: buffer to account for misaligned lanelets
-		lanelet_polygons = [lanelet.polygon.buffer(buffer_) for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']
+		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']  #buffer_=1e-6 if in latitude/longitude
 		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
 		return self._drivable_polygon
@@ -240,7 +267,7 @@ class MapData:
 
 		return self._cells
 				
-	def plot(self, c='r'):
+	def plot(self, is_show=True, c='r', _type='drivable'):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
 		# # # # # # # # # # # # # # 
@@ -304,22 +331,22 @@ class MapData:
 		for poly in self.polygons.values():
 			__plot_polygon(poly.polygon)
 
-		# NOTE: uncomment to see drivable region
-		__plot_drivable_polygon()
-
-		for lanelet in self.lanelets.values():
-			# NOTE: comment when trying see only drivable region
-			#__plot_polygon(lanelet.polygon)
-			
-			# NOTE: uncomment to see lanelet cells
-			#__plot_lanelet_cells(lanelet)
-
-			continue  # to avoid error if empty for-loop
+		if _type == 'drivable':
+			__plot_drivable_polygon()
+		elif _type == 'lane':
+			for lanelet in self.lanelets.values():
+				__plot_polygon(lanelet.polygon)
+		elif _type == 'cell':
+			for lanelet in self.lanelets.values():
+				__plot_lanelet_cells(lanelet)
+		else:
+			raise RuntimeError("_type can only take values 'drivable', 'lane', and 'cell'")
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon)
 
-		plt.show()
+		if is_show:
+			plt.show()
 
 	def parse(self, path):
 		''' Parse OSM-XML file that fulfills the Lanelet2 framework '''
@@ -356,7 +383,7 @@ class MapData:
 			self.linestrings[id_] = L2_Linestring(id_, shapely_linestring, type_, subtype)
 
 		def __extract_lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle, relation_element):
-			lanelet = Lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle)
+			lanelet = Lanelet(id_, subtype, region, location, one_way, turn_dir, vehicle, pedestrian, bicycle, buffer_=self.buffer_)
 
 			for member in relation_element.iter('member'):
 				member_role = member.get('role')
@@ -459,6 +486,7 @@ class MapData:
 									other.right_bound.linestring = LineString(new_coords)
 
 			# re-compute polygons
+			# NOTE: lanelet with id=1705 has empty geometry collection error
 			for lanelet in self.lanelets.values():
 				#lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 				assert lanelet.polygon
