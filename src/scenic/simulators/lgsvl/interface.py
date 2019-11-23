@@ -23,7 +23,7 @@ class LGSVLWorkspace(Workspace):
 		self.drivable_region = PolygonalRegion(polygon=self.road_map.drivable_polygon, orientation=self.road_direction)
 
 	def show(self, plt):
-		self.road_map.plot(is_show=True, _type='cell')
+		self.road_map.plot(is_show=True, _type='lane')
 		#plt.plot()
 
 	@property

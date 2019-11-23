@@ -267,7 +267,7 @@ class MapData:
 
 		return self._cells
 				
-	def plot(self, is_show=True, c='r', _type='drivable'):
+	def plot(self, is_show=True, c='r', _type='drivable', just_points=False):
 		''' Plot polygon representations of data fields on Matplotlib '''
 
 		# # # # # # # # # # # # # # 
@@ -302,9 +302,20 @@ class MapData:
 			else:
 				raise RuntimeError(f'Drivable polygon has unhandled type={type(self.drivable_polygon)}')
 
-		def __plot_lanelet_cells(lanelet, just_points=False):
-			for cell in lanelet.cells:
-				__plot_polygon(cell.polygon, just_points)
+		def __plot_lanelets(just_points=False):
+			for lanelet in self.lanelets.values():
+				# NOTE: checking type since cascaded union, which was used to compute lanelet polygon, can return Polygon or MultiPolygon
+				if isinstance(lanelet.polygon, MultiPolygon):
+					__plot_multipolygon(lanelet.polygon, just_points)
+				elif isinstance(lanelet.polygon, Polygon):
+					__plot_polygon(lanelet.polygon, just_points)
+				else:
+					raise RuntimeError(f'Polygon of lanelet with id={lanelet.id_} has unhandled type={type(lanelet.polygon)}')
+
+		def __plot_cells(just_points=False):
+			for lanelet in self.lanelets.values():
+				for cell in lanelet.cells:
+					__plot_polygon(cell.polygon, just_points)
 
 		# NOTE: for testing purposes
 		def __plot_polygon_points(polygon, c=c):
@@ -329,21 +340,19 @@ class MapData:
 		# # # # # # # # # # # 
 
 		for poly in self.polygons.values():
-			__plot_polygon(poly.polygon)
+			__plot_polygon(poly.polygon, just_points)
 
 		if _type == 'drivable':
-			__plot_drivable_polygon()
+			__plot_drivable_polygon(just_points)
 		elif _type == 'lane':
-			for lanelet in self.lanelets.values():
-				__plot_polygon(lanelet.polygon)
+			__plot_lanelets(just_points)
 		elif _type == 'cell':
-			for lanelet in self.lanelets.values():
-				__plot_lanelet_cells(lanelet)
+			__plot_cells(just_points)
 		else:
 			raise RuntimeError("_type can only take values 'drivable', 'lane', and 'cell'")
 
 		for area in self.areas.values():
-			__plot_polygon(area.polygon)
+			__plot_polygon(area.polygon, just_points)
 
 		if is_show:
 			plt.show()
@@ -488,7 +497,9 @@ class MapData:
 			# re-compute polygons
 			# NOTE: lanelet with id=1705 has empty geometry collection error
 			for lanelet in self.lanelets.values():
-				#lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
+				if lanelet.id_ == 1705:
+					continue
+				lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 				assert lanelet.polygon
 			self._drivable_polygon = None
 			assert self.drivable_polygon
@@ -609,4 +620,4 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-		__align_lanelets()  # ensure lanelet endpoints overlap exactly
+		#__align_lanelets()  # ensure lanelet endpoints overlap exactly
