@@ -131,32 +131,33 @@ class Lanelet():
 		# determine linestring with more points		
 		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
 		num_left_pts = len(self.left_bound.linestring.coords)  # number of points in left bound linestring
+		right_has_more = False
 		if num_right_pts > num_left_pts:
+			right_has_more = True
 			more_pts_linestr = self.right_bound.linestring
 			less_pts_linestr = self.left_bound.linestring 
 		else:
 			more_pts_linestr = self.left_bound.linestring
 			less_pts_linestr = self.right_bound.linestring
 
-		# connect points from linestring (with more points) to other linestring (one with less points)
-		# NOTE: heading defined by slope of line segements of linestring with more points
+		# connect points from linestring (with more points) to other linestring (that has less points)
 		more_pts_coords = more_pts_linestr.coords
 		for i in range(len(more_pts_coords) - 1):
 			curr_pt = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
 			next_pt = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
+
+			less_first_pt = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  # first point of linestring with less points
+			less_second_pt = Point(less_pts_linestr.coords[1][0], less_pts_linestr.coords[1][1])  # second point of linestring with less points
+			less_last_pt = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  # last point of linestring with less points
 
 			# compute closes point on other linestring
 			# endpoints guarantee other point is a coordinate of linestring
 			# middle points project to points not necessarily coordiantes of linestring
 			if i == 0:
 				bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
-				pt_1 = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  # first point of linestring with less points
-				pt_neg_1 = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  # last point of linestring with less points
-				bound_pt_2 = pt_1 if next_pt.distance(pt_1) < next_pt.distance(pt_neg_1) else pt_neg_1
+				bound_pt_2 = less_first_pt if next_pt.distance(less_first_pt) < next_pt.distance(less_last_pt) else less_last_pt
 			elif i == (len(more_pts_coords) - 1):
-				pt_1 = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  # first point of linestring with less points
-				pt_neg_1 = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  # last point of linestring with less points
-				bound_pt_1 = pt_1 if next_pt.distance(pt_1) < next_pt.distance(pt_neg_1) else pt_neg_1
+				bound_pt_1 = less_first_pt if next_pt.distance(less_first_pt) < next_pt.distance(less_last_pt) else less_last_pt
 				bound_pt_2 = less_pts_linestr.interpolate(less_pts_linestr.project(curr_pt)) 
 			else:
 				bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
@@ -165,8 +166,9 @@ class Lanelet():
 			cell_polygon = Polygon([(p.x, p.y) for p in [curr_pt, next_pt, bound_pt_1, bound_pt_2]]).buffer(self.buffer_)
 
 			# FIXME: (assuming) can define heading based on lanelet's right bound
-			delta_x = next_pt.x - curr_pt.x
-			cell_heading = math.atan((next_pt.y - curr_pt.y) / delta_x) + math.pi / 2 if delta_x else 0 # since headings in radians clockwise from y-axis
+			delta_x = next_pt.x - curr_pt.x if right_has_more else less_second_pt.x - less_first_pt.x
+			delta_y = next_pt.y - curr_pt.y if right_has_more else less_second_pt.y - less_first_pt.y
+			cell_heading = math.atan(delta_y / delta_x) + math.pi / 2 if delta_x else 0 # since headings in radians clockwise from y-axis
 
 			cell = self.Cell(cell_polygon, cell_heading)
 			self._cells.append(cell)
@@ -250,8 +252,8 @@ class MapData:
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		lanelet_polygons = [lanelet.polygon for lanelet in self.lanelets.values() if lanelet.subtype != 'crosswalk']  #buffer_=1e-6 if in latitude/longitude
-		self._drivable_polygon = cascaded_union(lanelet_polygons)  # returns either a Shapely Polygon or MultiPolygon
+		cell_polygons = [cell[0] for cell in self._cells]
+		self._drivable_polygon = cascaded_union(cell_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
 		return self._drivable_polygon
 
@@ -317,6 +319,15 @@ class MapData:
 				for cell in lanelet.cells:
 					__plot_polygon(cell.polygon, just_points)
 
+		def __plot_linestrings(just_points=False, c=c):
+			for linestring in self.linestrings.values():
+				if just_points:
+					__plot_linestring_points(linestring.linestring)
+					continue
+
+				x, y = linestring.linestring.coords.xy
+				plt.plot(x, y, c=c)
+
 		# NOTE: for testing purposes
 		def __plot_polygon_points(polygon, c=c):
 			''' Plots polygon's exterior points in red and interior points in blue '''
@@ -335,6 +346,15 @@ class MapData:
 				for coord in coords_map:
 					plt.plot(coord[0], coord[1], marker='x', c='b')
 
+		# NOTE: for testing purposes
+		def __plot_linestring_points(linestring):
+			assert isinstance(linestring, LineString)  # Shapely LineString
+
+			x, y = linestring.coords.xy
+			coords_map = zip(x, y)
+			for i, coords in enumerate(coords_map):
+				plt.plot(coords[0], coords[1], marker='.', c=['r', 'b', 'g', 'c', 'm', 'y', 'k'][i % 7])  # to show direction
+
 		# # # # # # # # # # # 
 		# MARK: - PLOTTING  #
 		# # # # # # # # # # # 
@@ -348,8 +368,10 @@ class MapData:
 			__plot_lanelets(just_points)
 		elif _type == 'cell':
 			__plot_cells(just_points)
+		elif _type == 'line':
+			__plot_linestrings(just_points)
 		else:
-			raise RuntimeError("_type can only take values 'drivable', 'lane', and 'cell'")
+			raise RuntimeError("_type can only take values 'drivable', 'lane', 'cell', and 'line'")
 
 		for area in self.areas.values():
 			__plot_polygon(area.polygon, just_points)
