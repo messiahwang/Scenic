@@ -16,8 +16,6 @@ from shapely.ops import cascaded_union
 	groups, projects, and persons.
 """
 
-# NOTE: undefined region in PolygonalVectorField could be because buffer in drivable_region but not cell/lanelet
-
 class L2_Point:
 	''' Point representation of Lanelet2 Point primitive type
 	using Shapely's Point class '''
@@ -94,43 +92,14 @@ class Lanelet():
 			self._polygon = cascaded_union([cell.polygon for cell in self.cells])  # returns either a Shapely Polygon or MultiPolygon
 		return self._polygon
 
-		"""
-		NOTE: old method of computing polygon from linestrings -- changed to taking a cascading union of cells
-
-		if self._polygon:
-			return self._polygon
-
-		left_bound_coords = list(self.left_bound.linestring.coords)
-		right_bound_coords = list(self.right_bound.linestring.coords)
-
-		''' NOTE: 
-		(*)	Noticed that when always reversed the right bound, some of the
-		lanelet polygons were Z-shaped instead of rectangular.
-		(*)	Determined that there must not be a defined convention in the Lanelet2 format
-		for the order in which points were given.
-		(*)	Reversal will occur if bound "vectors" are not currently oriented head-to-tail,
-		which can be determined by comparing the distance of the left bound vector-head
-		to the head and tail of the right bound vector. '''
-		left_head = Point(left_bound_coords[-1])  # last point of the left bound 
-		right_tail = Point(right_bound_coords[0])  # first point of the right bound
-		right_head = Point(right_bound_coords[-1])  # first point of the right bound
-		if left_head.distance(right_head) < left_head.distance(right_tail):
-			right_bound_coords.reverse()
-
-		left_bound_coords.extend(right_bound_coords)
-		self._polygon = Polygon(left_bound_coords)
-
-		return self._polygon
-		"""
-
 	@property
 	def cells(self):
 		if self._cells:
 			return self._cells
 
 		# determine linestring with more points		
-		num_right_pts = len(self.right_bound.linestring.coords)  # number of points in right bound linestring
-		num_left_pts = len(self.left_bound.linestring.coords)  # number of points in left bound linestring
+		num_right_pts = len(self.right_bound.linestring.coords)  
+		num_left_pts = len(self.left_bound.linestring.coords) 
 		right_has_more = False
 		if num_right_pts > num_left_pts:
 			right_has_more = True
@@ -144,15 +113,15 @@ class Lanelet():
 		more_pts_coords = more_pts_linestr.coords
 		for i in range(len(more_pts_coords) - 1):
 			curr_pt = Point(more_pts_coords[i][0], more_pts_coords[i][1])  # convert to Shapely point
-			next_pt = Point(more_pts_coords[i+1][0], more_pts_coords[i+1][1])  # to compute second bound and heading
+			next_pt = Point(more_pts_coords[i + 1][0], more_pts_coords[i + 1][1])  # to compute second bound and heading
 
-			less_first_pt = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  # first point of linestring with less points
-			less_second_pt = Point(less_pts_linestr.coords[1][0], less_pts_linestr.coords[1][1])  # second point of linestring with less points
-			less_last_pt = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  # last point of linestring with less points
+			less_first_pt = Point(less_pts_linestr.coords[0][0], less_pts_linestr.coords[0][1])  
+			less_second_pt = Point(less_pts_linestr.coords[1][0], less_pts_linestr.coords[1][1])  
+			less_last_pt = Point(less_pts_linestr.coords[-1][0], less_pts_linestr.coords[-1][1])  
 
-			# compute closes point on other linestring
+			# compute closest point on other linestring
 			# endpoints guarantee other point is a coordinate of linestring
-			# middle points project to points not necessarily coordiantes of linestring
+			# middle points project to points that are not necessarily coordiantes of linestring
 			if i == 0:
 				bound_pt_1 = less_pts_linestr.interpolate(less_pts_linestr.project(next_pt))
 				bound_pt_2 = less_first_pt if next_pt.distance(less_first_pt) < next_pt.distance(less_last_pt) else less_last_pt
