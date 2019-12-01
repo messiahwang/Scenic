@@ -221,7 +221,7 @@ class MapData:
 		if self._drivable_polygon:
 			return self._drivable_polygon
 
-		cell_polygons = [cell[0] for cell in self._cells]
+		cell_polygons = [cell[0] for cell in self.cells]
 		self._drivable_polygon = cascaded_union(cell_polygons)  # returns either a Shapely Polygon or MultiPolygon
 
 		return self._drivable_polygon
@@ -436,12 +436,8 @@ class MapData:
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
 
-		def __align_lanelets(percent_err=1):
+		def __align_lanelets(min_dist=0.5):
 			''' Align lanelet bounds to overlap exactly '''
-
-			bounds = self.drivable_polygon.bounds  # (minx, miny, maxx, maxy)
-			greater_dim = max(bounds[2] - bounds[0], bounds[3] - bounds[1])
-			min_dist = greater_dim * percent_err / 100  # minimum distance two points before being combined
 
 			lanelets = [v for v in self.lanelets.values()]
 			for i in range(len(lanelets) - 1):
@@ -611,4 +607,4 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-		#__align_lanelets()  # ensure lanelet endpoints overlap exactly
+		__align_lanelets()  # ensure lanelet endpoints overlap exactly
