@@ -348,7 +348,7 @@ class MapData:
 		if is_show:
 			plt.show()
 
-	def parse(self, path):
+	def parse(self, path, align_range=0):
 		''' Parse OSM-XML file that fulfills the Lanelet2 framework '''
 
 		# # # # # # # # # # # # # # 
@@ -436,9 +436,15 @@ class MapData:
 				except:
 					raise RuntimeError(f'Unknown regulatory element with id={reg_elem_id} referenced in lanelet with id={lanelet_id}')
 
-		def __align_lanelets(min_dist=0.5):
+		def __align_lanelets(align_range):
 			''' Align lanelet bounds to overlap exactly '''
 
+			assert isinstance(align_range, int) or isinstance(align_range, float)
+			if not align_range:
+				print('\n0 points realigned')
+				return
+
+			ctr = 0
 			lanelets = [v for v in self.lanelets.values()]
 			for i in range(len(lanelets) - 1):
 				curr = lanelets[i]
@@ -459,7 +465,9 @@ class MapData:
 							other_pt = other_bound_pts[k]
 							dist = curr_pt.distance(other_pt)
 
-							if dist != 0 and dist < min_dist:
+							if dist != 0 and dist < align_range:
+								ctr += 1
+
 								avg_x = (curr_pt.x + other_pt.x) / 2
 								avg_y = (curr_pt.y + other_pt.y) / 2
 
@@ -481,11 +489,10 @@ class MapData:
 									new_coords[0 if k == 2 else -1] = (avg_x, avg_y)
 									other.right_bound.linestring = LineString(new_coords)
 
+			print(f'\n{ctr} points realigned')
+
 			# re-compute polygons
-			# NOTE: lanelet with id=1705 has empty geometry collection error
 			for lanelet in self.lanelets.values():
-				if lanelet.id_ == 1705:
-					continue
 				lanelet._polygon = None  # FIXME: calculation creates self-intersection error with Shapely polygons for lanelets
 				assert lanelet.polygon
 			self._drivable_polygon = None
@@ -607,4 +614,4 @@ class MapData:
 				raise RuntimeError(f'Unknown relation type with id={relation_id}')
 
 		__execute_todo()  # add stored unparsed regulatory elements to corresponding lanelets
-		__align_lanelets()  # ensure lanelet endpoints overlap exactly
+		__align_lanelets(align_range)  # ensure lanelet endpoints overlap exactly
