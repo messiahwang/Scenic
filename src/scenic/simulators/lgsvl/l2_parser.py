@@ -572,7 +572,7 @@ class MapData:
 			region_tag = None
 			location_tag = None
 			turn_direction_tag = None  # for lanelets
-			one_way_tag = False  # for lanelets
+			one_way_tag = True  # one directional by default
 			vehicle_tag = False  # for lanelets
 			pedestrian_tag = False  # for lanelets
 			bicycle_tag = False  # for lanelets
@@ -592,9 +592,9 @@ class MapData:
 				elif key == 'turn_direction':
 					turn_direction_tag = value
 				elif key == 'one_way':
-					one_way_tag = True if value == 'true' else False
+					one_way_tag = True if value == 'yes' else False
 				elif key == 'participant:vehicle':
-					vehicle_tag = True if value == 'true' else False
+					vehicle_tag = True if value == 'yes' else False
 				elif key == 'participant:pedestrian':
 					pedestrian_tag = True if value == 'yes' else False
 				elif key == 'participant:bicycle':
